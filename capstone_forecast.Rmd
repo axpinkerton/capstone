@@ -22,6 +22,18 @@ zori_longer$year = substr(zori_longer$month_yr,1,4)
 zori_longer$month = substr(zori_longer$month_yr,6,7)
 zl1 <- zori_longer[zori_longer$year > 2014,] 
 sub_zl <- zl1[zl1$year<2021,]
-sub_zl %>% summarise()
+sub_zori <- sub_zl %>% drop_na(rent)
+
+zori_full <- sub_zori %>% group_by(month_yr)%>%summarise(mean_rent=as.numeric(mean(rent)))
+zori_full$mo = substr(zori_full$month_yr,6,7)
+zori_full$yr = substr(zori_full$month_yr,1,4)
+zori_full = subset(zori_full,select=c(-month_yr))
+to_diff <- zori_full %>% pivot_wider(names_from = mo, values_from = mean_rent)
+to_diff$yr=as.numeric(to_diff$yr)
+ts(to_diff)
+
+
+
+
 ```
 
