@@ -15,6 +15,10 @@ library(lubridate)
 library(e1071)
 library(zoo)
 library(data.table)
+library(readxl)
+library(bayesforecast)
+
+
 zri = read_csv('/Users/APinkerton/NYC_DS_A/projects/capstone/Zip_Zri_AllHomesPlusMultifamily.csv')
 zori = read_csv('/Users/APinkerton/NYC_DS_A/projects/capstone/Zip_ZORI_AllHomesPlusMultifamily_SSA.csv')
 
@@ -22,11 +26,14 @@ zori_longer <- zori %>% pivot_longer(cols=starts_with('20'),names_to = 'month_yr
 
 zori_longer$year = substr(zori_longer$month_yr,1,4)
 zori_longer$month = substr(zori_longer$month_yr,6,7)
-zl1 <- zori_longer[zori_longer$year > 2014,] 
-sub_zl <- zl1[zl1$year<2021,]
-sub_zori <- sub_zl %>% drop_na(rent)
 
-zori_full <- sub_zori %>% group_by(month_yr)%>%summarise(mean_rent=as.numeric(mean(rent)))
+sub_zl_train <- zori_longer[zori_longer$year<2018,]
+sub_zl_test <- zori_longer[zori_longer$year>=2018,]
+
+sub_zori_train <- sub_zl_train %>% drop_na(rent)
+sub_zori_test <- sub_zl_test %>% drop_na(rent)
+
+zori_full <- drop_na(zori_longer) %>%  group_by(month_yr)%>%summarise(mean_rent=as.numeric(mean(rent)))
 zori_full$mo = substr(zori_full$month_yr,6,7)
 zori_full$yr = substr(zori_full$month_yr,1,4)
 #zori_full = subset(zori_full,select=c(-month_yr))
@@ -89,8 +96,170 @@ for(p in 1:2){
 
 AP.sarima = arima(x=zori_full$mean_rent, order = c(0,1,0), seasonal = list(order = c(0,1,0), period = per))
 
-AP.predict = forecast(AP.sarima, h=60, level = 80)
+AP.predict = forecast(AP.sarima, h=36, level = 80)
 
 autoplot(AP.predict)
+
+zori_full
+
+
+```
+```{r}
+top_df = read_excel('./SFR Markets.xlsx')
+colnames(top_df)=c('top100','top20')
+top100 = top_df$top100
+top20 = top_df$top20
+
+sub_zl_train  # Has Na's
+sub_zl_test  # Has Na's
+
+sub_zori_train # dropped na's 
+sub_zori_test  # dropped na's 
+
+MSA_lst = unique(sub_zori$MsaName)
+MSA_lst
+
+MSA_df = data.frame(MSA_lst)
+MSA_df
+top20_df = data.frame(top20) %>% drop_na(top20)
+top20_df$top_20 = 'yes'
+top20_df
+left_join(top20_df, MSA_df, by = c('top20'='MSA_lst'),keep=T)
+
+twenty_df_train = left_join(sub_zori_train,top20_df,by=c('MsaName'='top20'))
+twenty_df_test = left_join(sub_zori_test,top20_df,by=c('MsaName'='top20'))
+#twenty_df = subset(twenty_df,select=c(-yes))
+twenty_df_train
+top20_forecast_input_train <- twenty_df_train %>% subset(top_20=='yes') %>% group_by(MsaName,month_yr)%>% summarise(mean_rent=mean(rent))
+
+top20_forecast_input_test <-twenty_df_test %>% subset(top_20=='yes') %>% group_by(MsaName,month_yr) %>% summarise(mean_rent=mean(rent))
+
+top20_forecast_input_train
+top20_forecast_input_test
+```
+```{r}
+top20_forecast_input_train
+top20_forecast_input_test
+top_20_msa = unique(top20_forecast_input_train$MsaName)
+for (val in top_20_msa){filter(top20_forecast_input_train,MsaName==val)}
+
+d = 1
+DD = 1
+per = 12
+for(p in 1:2){
+  for(q in 1:2){
+    for(i in 1:2){
+      for(j in 1:2){
+        for(val in top_20_msa){filter(top20_forecast_input_train,MsaName==val)
+        if(p+d+q+i+DD+j<=10){
+          model<-arima(x=top20_forecast_input_train$mean_rent, order = c((p-1),d,(q-1)), seasonal = list(order=c((i-1),DD,(j-1)), period=per))
+          pval<-Box.test(model$residuals, lag=log(length(model$residuals)))
+          sse<-sum(model$residuals^2)
+          cat(p-1,d,q-1,i-1,DD,j-1,per, 'AIC=', model$aic, ' SSE=',sse,' p-VALUE=', pval$p.value,'\n')
+        }
+      }
+    }
+  }
+}
+}
+AP.sarima = arima(x=top20_forecast_input_train$mean_rent, order = c(1,1,1), seasonal = list(order = c(1,1,1), period = per))
+
+AP.predict = forecast(AP.sarima, h=36, level = 80)
+
+autoplot(AP.predict)
+
+
+```
+
+```{r}
+train = top20_forecast_input_train %>% group_by(month_yr)%>%summarise(mn_rnt = mean(mean_rent))
+train$mn_rnt
+
+d = 1
+DD = 1
+per = 12
+for(p in 1:2){
+  for(q in 1:2){
+    for(i in 1:2){
+      for(j in 1:2){
+        if(p+d+q+i+DD+j<=10){
+          model<-arima(x=train$mn_rnt, order = c((p-1),d,(q-1)), seasonal = list(order=c((i-1),DD,(j-1)), period=per))
+          pval<-Box.test(model$residuals, lag=log(length(model$residuals)))
+          sse<-sum(model$residuals^2)
+          cat(p-1,d,q-1,i-1,DD,j-1,per, 'AIC=', model$aic, ' SSE=',sse,' p-VALUE=', pval$p.value,'\n')
+        }
+      }
+    }
+  }
+}
+
+AP.sarima = arima(x=train$mn_rnt, order = c(0,1,0), seasonal = list(order = c(0,1,0), period = per))
+
+AP.predict = forecast(AP.sarima, h=41, level = 80)
+
+autoplot(AP.predict)
+
+top20_forecast_input_test%>% group_by(month_yr)%>%summarise(mn_rnt = mean(mean_rent))
+
+AP.predict
+cbind(top20_forecast_input_test%>% group_by(month_yr)%>%summarise(mn_rnt = mean(mean_rent)),AP.predict)
+
+
+
+
+
+
+
+
+```
+
+```{r}
+sub_zori
+
+top100_df = data.frame(top100)
+top100_df$top_100 = 'yes'
+top100_df
+
+one_hundred_df = left_join(sub_zori,top100_df,by=c('MsaName'='top100'))
+
+one_hundred_df
+
+```
+
+```{r}
+covid_df = read_csv('./capstone_csv_covid.csv')
+covid_df$county_st = paste(covid_df$county,covid_df$state, sep= ", ")
+covid_df$county_st
+
+city_county = read_csv('./counties_cities.csv')
+
+city_county$Metro
+
+top20_df
+
+#forecast::auto.arima(x=zori_full$mean_rent,seasonal = T,seasonal.test.args = list(12))
+
+#autoplot(bayesforecast::auto.sarima(zori_full$mean_rent))
+
+```
+
+```{r}
+
+twenty_df
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```
