@@ -17,7 +17,7 @@ library(zoo)
 library(data.table)
 library(readxl)
 library(bayesforecast)
-
+library(fable)
 
 zri = read_csv('/Users/APinkerton/NYC_DS_A/projects/capstone/Zip_Zri_AllHomesPlusMultifamily.csv')
 zori = read_csv('/Users/APinkerton/NYC_DS_A/projects/capstone/Zip_ZORI_AllHomesPlusMultifamily_SSA.csv')
@@ -29,6 +29,8 @@ zori_longer$month = substr(zori_longer$month_yr,6,7)
 
 sub_zl_train <- zori_longer[zori_longer$year<2018,]
 sub_zl_test <- zori_longer[zori_longer$year>=2018,]
+sub_zl_full_tr <- zori_longer[zori_longer$year<2020,]
+sub_zl_full_te <- zori_longer[zori_longer$year>=2020,]
 
 sub_zori_train <- sub_zl_train %>% drop_na(rent)
 sub_zori_test <- sub_zl_test %>% drop_na(rent)
@@ -198,19 +200,70 @@ AP.sarima = arima(x=train$mn_rnt, order = c(0,1,0), seasonal = list(order = c(0,
 AP.predict = forecast(AP.sarima, h=41, level = 80)
 
 autoplot(AP.predict)
+```
 
+```{r}
+full_input_train <- drop_na(sub_zl_full_tr) %>% group_by(month_yr)%>%summarise(mean_rent=mean(rent))
+full_input_train  #len = 72
+
+
+full_input_test<-drop_na(sub_zl_full_te)%>%group_by(month_yr)%>%summarise(mean_rent=mean(rent))
+full_input_test  # len = 17 
+
+
+AP.sarima = arima(x=full_input_train$mean_rent, order = c(0,1,0), seasonal = list(order = c(0,1,0), period = per))
+
+
+
+AP.predict = forecast(AP.sarima, h=17, level = 80) 
+AP.predict=data.frame(AP.predict)
+AP.predict$rown = row.names(AP.predict)
+AP.predict
+
+autoplot(AP.predict)
+full_input_train$observation <- 1:nrow(full_input_train) 
+full_input_train$observation
+ggplot(full_input_train)+geom_line(aes(x=observation,y=mean_rent,group=1))
+
+full_input_train
+
+ggplot(full_input_test,aes(x=month_yr,y=mean_rent,group=1))+geom_line()
+
+
+ggplot(full_input_test,aes(x=month_yr,y=mean_rent,group=1))+geom_line()
+
+
+```
+
+```{r}
 top20_forecast_input_test%>% group_by(month_yr)%>%summarise(mn_rnt = mean(mean_rent))
 
 AP.predict
-cbind(top20_forecast_input_test%>% group_by(month_yr)%>%summarise(mn_rnt = mean(mean_rent)),AP.predict)
+df1 = cbind(top20_forecast_input_test%>% group_by(month_yr)%>%summarise(mn_rnt = mean(mean_rent)),AP.predict)
+colnames(df1) = c("month_yr","mn_rnt","point_forecast","lo_80",
+"hi_80" )
+ggplot(data = df1) + geom_line(aes(y=mn_rnt, x=month_yr,color=1,group=1))+ geom_line(aes(y=point_forecast, x=month_yr,color=2,group=1))
+
+df1
+```
+```{r}
+top20_forecast_input_train = data.frame(top20_forecast_input_train)
+top20_forecast_input_test = data.frame(top20_forecast_input_test)
+msa20 = unique(top20_forecast_input_train$MsaName)
+for (msa in msa20){filter(top20_forecast_input_train,MsaName==msa)}
+
+top20_forecast_input_train%>%model(
+arima = ARIMA(mean_rent)#,order = c(0,1,0), seasonal = list(order = c(0,1,0), period = 12)))%>%forecast(h=36)
+
+
+arima(mean_rent,order = c(0,1,0), seasonal = list(order = c(0,1,0), period = 12))
+
+AP.predict = forecast(AP.sarima, h=41, level = 80)
 
 
 
-
-
-
-
-
+write.csv(top20_forecast_input_train,'top20_forecast_input_train.csv')
+top20_forecast_input_test
 ```
 
 ```{r}
@@ -232,7 +285,7 @@ covid_df$county_st = paste(covid_df$county,covid_df$state, sep= ", ")
 covid_df$county_st
 
 city_county = read_csv('./counties_cities.csv')
-
+city_county
 city_county$Metro
 
 top20_df
