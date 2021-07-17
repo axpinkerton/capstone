@@ -197,7 +197,7 @@ for(p in 1:2){
 
 AP.sarima = arima(x=train$mn_rnt, order = c(0,1,0), seasonal = list(order = c(0,1,0), period = per))
 
-AP.predict = forecast(AP.sarima, h=41, level = 80)
+AP.predict = forecast(AP.sarima, h=36, level = 80)
 
 autoplot(AP.predict)
 ```
@@ -223,7 +223,7 @@ AP.predict
 autoplot(AP.predict)
 full_input_train$observation <- 1:nrow(full_input_train) 
 full_input_train$observation
-ggplot(full_input_train)+geom_line(aes(x=observation,y=mean_rent,group=1))
+ggplot(full_input_train)+geom_line(aes(x=observation,y=mean_rent,group=1))+geom_line(aes(x=AP.predict$rown,y=AP.predict$Point.Forecast,group=1))
 
 full_input_train
 
